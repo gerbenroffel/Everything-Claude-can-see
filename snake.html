@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Snake</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1a1a2e;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    font-family: monospace;
+    color: #eee;
+  }
+  h1 { margin-bottom: 10px; letter-spacing: 4px; color: #4ecca3; }
+  #score { margin-bottom: 10px; font-size: 18px; }
+  canvas {
+    border: 2px solid #4ecca3;
+    background: #16213e;
+  }
+  #message {
+    margin-top: 14px;
+    font-size: 14px;
+    color: #aaa;
+  }
+</style>
+</head>
+<body>
+<h1>SNAKE</h1>
+<div id="score">Score: 0</div>
+<canvas id="c" width="400" height="400"></canvas>
+<div id="message">Press any arrow key to start</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const CELL = 20;
+const COLS = canvas.width / CELL;
+const ROWS = canvas.height / CELL;
+
+let snake, dir, nextDir, food, score, running, loop;
+
+function init() {
+  snake = [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }];
+  dir = { x: 1, y: 0 };
+  nextDir = { x: 1, y: 0 };
+  score = 0;
+  running = false;
+  document.getElementById('score').textContent = 'Score: 0';
+  document.getElementById('message').textContent = 'Press any arrow key to start';
+  placeFood();
+  draw();
+}
+
+function placeFood() {
+  let pos;
+  do {
+    pos = { x: Math.floor(Math.random() * COLS), y: Math.floor(Math.random() * ROWS) };
+  } while (snake.some(s => s.x === pos.x && s.y === pos.y));
+  food = pos;
+}
+
+function step() {
+  dir = nextDir;
+  const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+
+  if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS ||
+      snake.some(s => s.x === head.x && s.y === head.y)) {
+    gameOver();
+    return;
+  }
+
+  snake.unshift(head);
+
+  if (head.x === food.x && head.y === food.y) {
+    score++;
+    document.getElementById('score').textContent = 'Score: ' + score;
+    placeFood();
+  } else {
+    snake.pop();
+  }
+
+  draw();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Food
+  ctx.fillStyle = '#e94560';
+  ctx.beginPath();
+  ctx.arc(food.x * CELL + CELL / 2, food.y * CELL + CELL / 2, CELL / 2 - 2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Snake
+  snake.forEach((seg, i) => {
+    ctx.fillStyle = i === 0 ? '#4ecca3' : '#2eaa83';
+    ctx.fillRect(seg.x * CELL + 1, seg.y * CELL + 1, CELL - 2, CELL - 2);
+  });
+}
+
+function gameOver() {
+  clearInterval(loop);
+  running = false;
+  document.getElementById('message').textContent = `Game over! Score: ${score} — Press any arrow key to restart`;
+}
+
+document.addEventListener('keydown', e => {
+  const keys = {
+    ArrowUp:    { x: 0, y: -1 },
+    ArrowDown:  { x: 0, y: 1 },
+    ArrowLeft:  { x: -1, y: 0 },
+    ArrowRight: { x: 1, y: 0 },
+  };
+  const d = keys[e.key];
+  if (!d) return;
+  e.preventDefault();
+
+  // Prevent reversing
+  if (d.x === -dir.x && d.y === -dir.y) return;
+  nextDir = d;
+
+  if (!running) {
+    if (score > 0 || !running) init();
+    running = true;
+    document.getElementById('message').textContent = '';
+    loop = setInterval(step, 120);
+  }
+});
+
+init();
+</script>
+</body>
+</html>
