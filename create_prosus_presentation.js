@@ -1,231 +1,453 @@
 const PptxGenJS = require('pptxgenjs');
+const sharp = require('sharp');
+const path = require('path');
 
-const pptx = new PptxGenJS();
+// ─── Brand tokens (Prosus official palette) ───────────────────────────────────
+// Primary orange #E8521A, dark navy #0F1B2D, off-white #F5F5F0, mid-grey #8C9BAB
+const B = {
+  orange:   'E8521A',   // Prosus signature orange
+  orangeD:  'C23F0D',   // darker orange for depth
+  navy:     '0F1B2D',   // deep navy (main background)
+  navyMid:  '1A2E45',   // card backgrounds
+  navyLt:   '243752',   // lighter panel
+  white:    'FFFFFF',
+  offwhite: 'F5F5F0',
+  muted:    'A8B8C8',
+  subtle:   '4A6070',
+  green:    '00B28A',   // used for positive metrics only
+  rule:     '1E3550',   // divider lines
+};
 
-// Theme colors
-const DARK_BG = '1A1A2E';
-const ACCENT = '00B4D8';
-const LIGHT_TEXT = 'FFFFFF';
-const SUBTEXT = 'B0C4DE';
-const CARD_BG = '16213E';
-const GREEN = '06D6A0';
-const ORANGE = 'FFB703';
+// ─── Build the Prosus logo PNG in memory ─────────────────────────────────────
+// Geometric 3D "P" mark (simplified flat version) + wordmark "prosus"
+// Actual Prosus P-mark: two concentric arcs on right half of a vertical stroke
+async function buildLogoPng(width = 320, height = 80) {
+  // The Prosus logomark is an orange geometric P with a 3-D look.
+  // We replicate with SVG: bold vertical bar + two arcs forming the bowl,
+  // plus a subtle inner highlight for depth. Wordmark in wide-tracked caps.
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+    <!-- P mark -->
+    <!-- vertical stroke -->
+    <rect x="4" y="8" width="14" height="64" rx="2" fill="#E8521A"/>
+    <!-- outer bowl -->
+    <path d="M18 8 Q58 8 58 36 Q58 64 18 64 L18 52 Q44 52 44 36 Q44 20 18 20 Z" fill="#E8521A"/>
+    <!-- inner shadow for 3-D depth -->
+    <path d="M18 20 Q44 20 44 36 Q44 52 18 52 L18 44 Q36 44 36 36 Q36 28 18 28 Z" fill="#C23F0D"/>
+    <!-- wordmark -->
+    <text x="72" y="53" font-family="Arial,Helvetica,sans-serif" font-size="32"
+          font-weight="700" letter-spacing="2" fill="#FFFFFF">prosus</text>
+  </svg>`;
 
-pptx.layout = 'LAYOUT_WIDE';
-pptx.author = 'Prosus Investor Relations';
-pptx.company = 'Prosus N.V.';
+  const pngBuf = await sharp(Buffer.from(svg)).png().toBuffer();
+  return pngBuf.toString('base64');
+}
 
-// ─── SLIDE 1: Title ──────────────────────────────────────────────────────────
-const s1 = pptx.addSlide();
-s1.background = { color: DARK_BG };
+async function main() {
+  const logoB64 = await buildLogoPng();
+  const logoData = `data:image/png;base64,${logoB64}`;
 
-// Left accent bar
-s1.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 0.12, h: 7.5, fill: { color: ACCENT } });
+  const pptx = new PptxGenJS();
+  pptx.layout = 'LAYOUT_WIDE';   // 13.33 × 7.5 inches
 
-// Title
-s1.addText('Prosus N.V.', {
-  x: 0.4, y: 1.2, w: 9, h: 0.9,
-  fontSize: 42, bold: true, color: LIGHT_TEXT, fontFace: 'Calibri',
-});
-s1.addText('FY2025 Annual Report', {
-  x: 0.4, y: 2.1, w: 9, h: 0.7,
-  fontSize: 30, bold: false, color: ACCENT, fontFace: 'Calibri',
-});
-s1.addText('Management Overview', {
-  x: 0.4, y: 2.8, w: 9, h: 0.5,
-  fontSize: 20, color: SUBTEXT, fontFace: 'Calibri',
-});
-
-// Divider
-s1.addShape(pptx.ShapeType.rect, { x: 0.4, y: 3.55, w: 5, h: 0.04, fill: { color: ACCENT } });
-
-// Bullet highlights
-const bullets = [
-  'Revenue: US$6.2bn (+21% local currency)',
-  'Consolidated aEBIT: US$179m (+100%)',
-  'Core Headline Earnings: US$7.4bn (+47%)',
-  'Major acquisitions: Despegar & Just Eat Takeaway.com (>US$7bn)',
-];
-s1.addText(bullets.map(b => ({ text: b, options: { bullet: { type: 'bullet' }, paraSpaceAfter: 4 } })), {
-  x: 0.4, y: 3.75, w: 9, h: 2.2,
-  fontSize: 14, color: SUBTEXT, fontFace: 'Calibri', valign: 'top',
-});
-
-// Footer
-s1.addText('Year ended 31 March 2025  |  All figures in US dollars', {
-  x: 0.4, y: 6.9, w: 12.3, h: 0.35,
-  fontSize: 10, color: '555577', fontFace: 'Calibri',
-});
-
-// ─── SLIDE 2: Financial Performance ──────────────────────────────────────────
-const s2 = pptx.addSlide();
-s2.background = { color: DARK_BG };
-
-s2.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 13.33, h: 1.0, fill: { color: CARD_BG } });
-s2.addText('Financial Performance Highlights', {
-  x: 0.4, y: 0.15, w: 12.5, h: 0.7,
-  fontSize: 24, bold: true, color: LIGHT_TEXT, fontFace: 'Calibri',
-});
-
-// KPI cards — row 1
-const kpis = [
-  { label: 'Revenue', val: 'US$6.2bn', note: '+13% YoY\n+21% local currency', color: ACCENT },
-  { label: 'aEBIT', val: 'US$179m', note: '+100% YoY\nvs -US$118m in FY24', color: GREEN },
-  { label: 'Core Headline Earnings', val: 'US$7.4bn', note: '+47% YoY', color: ORANGE },
-  { label: 'Free Cash Inflow', val: 'US$1.0bn', note: 'vs US$422m in FY24', color: ACCENT },
-];
-
-kpis.forEach((k, i) => {
-  const x = 0.3 + i * 3.2;
-  s2.addShape(pptx.ShapeType.roundRect, { x, y: 1.2, w: 3.0, h: 2.0, fill: { color: CARD_BG }, line: { color: k.color, pt: 2 }, rectRadius: 0.08 });
-  s2.addText(k.label, { x, y: 1.25, w: 3.0, h: 0.4, fontSize: 11, color: SUBTEXT, align: 'center', fontFace: 'Calibri' });
-  s2.addText(k.val, { x, y: 1.65, w: 3.0, h: 0.65, fontSize: 22, bold: true, color: k.color, align: 'center', fontFace: 'Calibri' });
-  s2.addText(k.note, { x, y: 2.3, w: 3.0, h: 0.7, fontSize: 10, color: SUBTEXT, align: 'center', fontFace: 'Calibri' });
-});
-
-// aEBIT trend table
-s2.addText('aEBIT Turnaround (US$m)', {
-  x: 0.3, y: 3.4, w: 6, h: 0.4,
-  fontSize: 14, bold: true, color: LIGHT_TEXT, fontFace: 'Calibri',
-});
-
-const trendRows = [
-  [{ text: 'Year', options: { bold: true, color: ACCENT } }, { text: 'Ecommerce aEBIT', options: { bold: true, color: ACCENT } }, { text: 'Group aEBIT', options: { bold: true, color: ACCENT } }],
-  [{ text: 'FY22' }, { text: '(413)' }, { text: '(586)' }],
-  [{ text: 'FY23' }, { text: '(381)' }, { text: '(537)' }],
-  [{ text: 'FY24' }, { text: '38' }, { text: '(118)' }],
-  [{ text: 'FY25', options: { bold: true, color: GREEN } }, { text: '443', options: { bold: true, color: GREEN } }, { text: '179', options: { bold: true, color: GREEN } }],
-];
-
-s2.addTable(trendRows, {
-  x: 0.3, y: 3.85, w: 6.5,
-  fontSize: 12, color: SUBTEXT, fontFace: 'Calibri',
-  fill: { color: CARD_BG },
-  border: { type: 'solid', color: '334466', pt: 1 },
-  rowH: 0.42,
-  align: 'center',
-  colW: [1.5, 2.5, 2.5],
-});
-
-// Revenue by geography note
-s2.addText('Top Revenue Regions (FY25)', {
-  x: 7.2, y: 3.4, w: 5.8, h: 0.4,
-  fontSize: 14, bold: true, color: LIGHT_TEXT, fontFace: 'Calibri',
-});
-
-const geoData = [
-  ['Eastern Europe', 'US$2,816m', '+19%'],
-  ['Latin America', 'US$1,572m', '+5%'],
-  ['Asia', 'US$718m', '+19%'],
-  ['Central Europe', 'US$788m', '+5%'],
-];
-geoData.forEach((row, i) => {
-  const y = 3.85 + i * 0.55;
-  s2.addText(row[0], { x: 7.2, y, w: 3.0, h: 0.45, fontSize: 12, color: SUBTEXT, fontFace: 'Calibri' });
-  s2.addText(row[1], { x: 10.2, y, w: 1.5, h: 0.45, fontSize: 12, color: LIGHT_TEXT, fontFace: 'Calibri', align: 'right' });
-  s2.addText(row[2], { x: 11.8, y, w: 1.3, h: 0.45, fontSize: 12, color: GREEN, fontFace: 'Calibri', align: 'right' });
-});
-
-// ─── SLIDE 3: Business Segments ───────────────────────────────────────────────
-const s3 = pptx.addSlide();
-s3.background = { color: DARK_BG };
-
-s3.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 13.33, h: 1.0, fill: { color: CARD_BG } });
-s3.addText('Business Segment Performance', {
-  x: 0.4, y: 0.15, w: 12.5, h: 0.7,
-  fontSize: 24, bold: true, color: LIGHT_TEXT, fontFace: 'Calibri',
-});
-
-const segments = [
-  { name: 'Food Delivery\n(iFood)', rev: 'US$1.3bn', aEBIT: 'US$226m', highlight: '+29% orders\n56M annual active users', color: ACCENT },
-  { name: 'Classifieds\n(OLX)', rev: 'US$788m', aEBIT: 'US$273m', highlight: '35% aEBIT margin\n63.6M monthly app users', color: GREEN },
-  { name: 'Payments & Fintech\n(PayU)', rev: 'US$1.1bn', aEBIT: '-US$31m', highlight: 'Improving; H2 momentum\niyzico: +87% local rev', color: ORANGE },
-  { name: 'Etail\n(eMAG)', rev: 'US$2.5bn', aEBIT: 'US$14m', highlight: 'Turnaround: +US$40m\nvs -US$26m FY24', color: ACCENT },
-  { name: 'Edtech', rev: 'US$170m', aEBIT: '-US$33m', highlight: 'Loss improved US$65m\nNear cashflow breakeven', color: SUBTEXT },
-  { name: 'Tencent\n(23.5% stake)', rev: '—', aEBIT: 'US$5.7bn*', highlight: '*Equity accounted results\n+41% non-IFRS profit', color: ORANGE },
-];
-
-const cols = 3;
-segments.forEach((seg, i) => {
-  const col = i % cols;
-  const row = Math.floor(i / cols);
-  const x = 0.25 + col * 4.35;
-  const y = 1.15 + row * 2.9;
-
-  s3.addShape(pptx.ShapeType.roundRect, { x, y, w: 4.1, h: 2.65, fill: { color: CARD_BG }, line: { color: seg.color, pt: 2 }, rectRadius: 0.08 });
-  s3.addText(seg.name, { x: x + 0.12, y: y + 0.1, w: 3.86, h: 0.55, fontSize: 13, bold: true, color: seg.color, fontFace: 'Calibri' });
-  s3.addText(`Revenue: ${seg.rev}`, { x: x + 0.12, y: y + 0.68, w: 3.86, h: 0.35, fontSize: 11, color: SUBTEXT, fontFace: 'Calibri' });
-  s3.addText(`aEBIT: ${seg.aEBIT}`, { x: x + 0.12, y: y + 1.05, w: 3.86, h: 0.35, fontSize: 12, bold: true, color: LIGHT_TEXT, fontFace: 'Calibri' });
-  s3.addShape(pptx.ShapeType.rect, { x: x + 0.12, y: y + 1.45, w: 3.86, h: 0.02, fill: { color: seg.color } });
-  s3.addText(seg.highlight, { x: x + 0.12, y: y + 1.55, w: 3.86, h: 0.8, fontSize: 10, color: SUBTEXT, fontFace: 'Calibri' });
-});
-
-// ─── SLIDE 4: Strategy & Outlook ─────────────────────────────────────────────
-const s4 = pptx.addSlide();
-s4.background = { color: DARK_BG };
-
-s4.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 13.33, h: 1.0, fill: { color: CARD_BG } });
-s4.addText('Strategy & Outlook', {
-  x: 0.4, y: 0.15, w: 12.5, h: 0.7,
-  fontSize: 24, bold: true, color: LIGHT_TEXT, fontFace: 'Calibri',
-});
-
-// Left column: strategic pillars
-s4.addText('Strategic Pillars', {
-  x: 0.3, y: 1.1, w: 5.9, h: 0.45,
-  fontSize: 16, bold: true, color: ACCENT, fontFace: 'Calibri',
-});
-
-const pillars = [
-  { icon: '1', title: 'AI-First Businesses', desc: 'Toqan assistant used by 20,000+ staff daily; 11% avg productivity gain. Large Commerce Model (LCM) in development.' },
-  { icon: '2', title: 'Regional Ecosystems', desc: 'LatAm: >100M customers, >US$25bn GMV. India: Swiggy, PayU, Meesho. Europe: eMAG, OLX, iyzico + Just Eat.' },
-  { icon: '3', title: 'Shareholder Value', desc: 'Share buyback: 11% NAV/share increase; float -27%. Dividend doubled to 20 euro cents. >US$7bn M&A committed.' },
-];
-
-pillars.forEach((p, i) => {
-  const y = 1.7 + i * 1.65;
-  s4.addShape(pptx.ShapeType.ellipse, { x: 0.3, y: y, w: 0.45, h: 0.45, fill: { color: ACCENT } });
-  s4.addText(p.icon, { x: 0.3, y: y, w: 0.45, h: 0.45, fontSize: 14, bold: true, color: DARK_BG, align: 'center', valign: 'middle', fontFace: 'Calibri' });
-  s4.addText(p.title, { x: 0.85, y: y, w: 5.3, h: 0.4, fontSize: 13, bold: true, color: LIGHT_TEXT, fontFace: 'Calibri' });
-  s4.addText(p.desc, { x: 0.85, y: y + 0.4, w: 5.3, h: 0.85, fontSize: 10.5, color: SUBTEXT, fontFace: 'Calibri' });
-});
-
-// Right column: key transactions & AI
-s4.addShape(pptx.ShapeType.rect, { x: 6.7, y: 1.1, w: 0.04, h: 6.1, fill: { color: ACCENT } });
-
-s4.addText('Key FY25 Transactions', {
-  x: 6.9, y: 1.1, w: 6.1, h: 0.45,
-  fontSize: 16, bold: true, color: ACCENT, fontFace: 'Calibri',
-});
-
-const deals = [
-  { co: 'Despegar', amt: 'US$1.7bn', note: 'LatAm travel — closes ecosystem for 100M+ customers' },
-  { co: 'Just Eat Takeaway.com', amt: '€4.1bn', note: 'AI-first European food delivery; 17 markets, 61M customers' },
-  { co: 'PayU / Mindgate', amt: 'US$68m', note: 'Real-time payments tech in India' },
-  { co: 'iyzico / Paynet', amt: 'US$87m', note: 'Payments expansion in Türkiye' },
-];
-
-deals.forEach((d, i) => {
-  const y = 1.7 + i * 0.95;
-  s4.addShape(pptx.ShapeType.rect, { x: 6.9, y, w: 6.15, h: 0.8, fill: { color: CARD_BG }, line: { color: ACCENT, pt: 1 } });
-  s4.addText(d.co, { x: 7.05, y: y + 0.05, w: 3.0, h: 0.35, fontSize: 12, bold: true, color: LIGHT_TEXT, fontFace: 'Calibri' });
-  s4.addText(d.amt, { x: 10.1, y: y + 0.05, w: 2.8, h: 0.35, fontSize: 13, bold: true, color: ORANGE, align: 'right', fontFace: 'Calibri' });
-  s4.addText(d.note, { x: 7.05, y: y + 0.4, w: 5.85, h: 0.35, fontSize: 9.5, color: SUBTEXT, fontFace: 'Calibri' });
-});
-
-s4.addText('AI Adoption Highlights', {
-  x: 6.9, y: 5.65, w: 6.1, h: 0.35,
-  fontSize: 13, bold: true, color: GREEN, fontFace: 'Calibri',
-});
-s4.addText(
-  '• iFood: 56% customer support automated; fraud chargebacks at 0.1%\n• OLX Magic: conversational AI buying experience launched\n• Ventures: US$88m invested in AI startups across 40+ transactions',
-  {
-    x: 6.9, y: 6.05, w: 6.2, h: 1.2,
-    fontSize: 10, color: SUBTEXT, fontFace: 'Calibri',
+  // ─── Helper: add logo to any slide (top-right) ──────────────────────────────
+  function addLogo(slide) {
+    slide.addImage({ data: logoData, x: 10.7, y: 0.22, w: 2.4, h: 0.6 });
   }
-);
 
-// ─── Save ─────────────────────────────────────────────────────────────────────
-pptx.writeFile({ fileName: 'prosus_fy2025_overview.pptx' })
-  .then(() => console.log('Saved: prosus_fy2025_overview.pptx'))
-  .catch(err => { console.error(err); process.exit(1); });
+  // ─── Helper: slide header bar ───────────────────────────────────────────────
+  function addHeader(slide, title) {
+    slide.addShape(pptx.ShapeType.rect, {
+      x: 0, y: 0, w: 13.33, h: 1.0, fill: { color: B.navyMid },
+    });
+    // left orange accent
+    slide.addShape(pptx.ShapeType.rect, {
+      x: 0, y: 0, w: 0.06, h: 1.0, fill: { color: B.orange },
+    });
+    slide.addText(title, {
+      x: 0.25, y: 0.16, w: 10.2, h: 0.68,
+      fontSize: 22, bold: true, color: B.white, fontFace: 'Arial',
+    });
+    addLogo(slide);
+  }
+
+  // ─── Helper: horizontal rule ─────────────────────────────────────────────────
+  function rule(slide, x, y, w) {
+    slide.addShape(pptx.ShapeType.rect, { x, y, w, h: 0.03, fill: { color: B.orange } });
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // SLIDE 1 — Title
+  // ══════════════════════════════════════════════════════════════════════════════
+  const s1 = pptx.addSlide();
+  s1.background = { color: B.navy };
+
+  // Left orange bar
+  s1.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 0.5, h: 7.5, fill: { color: B.orange } });
+
+  // Logo (top-right, on dark bg)
+  s1.addImage({ data: logoData, x: 10.7, y: 0.25, w: 2.4, h: 0.6 });
+
+  // Title block
+  s1.addText('FY2025 Annual Report', {
+    x: 0.75, y: 1.6, w: 9.5, h: 1.0,
+    fontSize: 46, bold: true, color: B.white, fontFace: 'Arial',
+  });
+  s1.addText('Management Overview', {
+    x: 0.75, y: 2.65, w: 9.5, h: 0.65,
+    fontSize: 26, bold: false, color: B.orange, fontFace: 'Arial',
+  });
+
+  rule(s1, 0.75, 3.5, 7.5);
+
+  // Key stats — 4 inline numbers
+  const titleStats = [
+    { val: 'US$6.2bn', lbl: 'Revenue' },
+    { val: '+21%',     lbl: 'Local-currency growth' },
+    { val: 'US$179m',  lbl: 'Group aEBIT' },
+    { val: 'US$7.4bn', lbl: 'Core headline earnings' },
+  ];
+  titleStats.forEach((s, i) => {
+    const x = 0.75 + i * 3.1;
+    s1.addText(s.val, {
+      x, y: 3.7, w: 2.9, h: 0.7,
+      fontSize: 26, bold: true, color: B.orange, fontFace: 'Arial',
+    });
+    s1.addText(s.lbl, {
+      x, y: 4.4, w: 2.9, h: 0.45,
+      fontSize: 11, color: B.muted, fontFace: 'Arial',
+    });
+  });
+
+  // Tagline
+  s1.addText('"A year of growth, innovation, disciplined execution and strategic milestones"', {
+    x: 0.75, y: 5.3, w: 11.5, h: 0.6,
+    fontSize: 13, italic: true, color: B.muted, fontFace: 'Arial',
+  });
+  s1.addText('— Fabricio Bloisi, CEO', {
+    x: 0.75, y: 5.9, w: 6, h: 0.35,
+    fontSize: 11, color: B.subtle, fontFace: 'Arial',
+  });
+
+  // Footer
+  s1.addText('Year ended 31 March 2025  |  All figures in US dollars unless otherwise stated', {
+    x: 0.75, y: 7.05, w: 12, h: 0.3,
+    fontSize: 9, color: B.subtle, fontFace: 'Arial',
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // SLIDE 2 — Financial Performance
+  // ══════════════════════════════════════════════════════════════════════════════
+  const s2 = pptx.addSlide();
+  s2.background = { color: B.navy };
+  addHeader(s2, 'Financial Performance Highlights');
+
+  // 4 KPI cards
+  const kpis = [
+    { val: 'US$6.2bn',  lbl: 'Total Revenue',           note: '+13% reported  |  +21% local currency' },
+    { val: 'US$179m',   lbl: 'Group aEBIT',              note: 'vs −US$118m in FY24 — 100% growth' },
+    { val: 'US$7.4bn',  lbl: 'Core Headline Earnings',   note: '+47% YoY, driven by Tencent & ecommerce' },
+    { val: 'US$1.0bn',  lbl: 'Free Cash Inflow',         note: 'vs US$422m in FY24' },
+  ];
+
+  kpis.forEach((k, i) => {
+    const x = 0.25 + i * 3.26;
+    // card
+    s2.addShape(pptx.ShapeType.rect, {
+      x, y: 1.15, w: 3.06, h: 1.9,
+      fill: { color: B.navyMid }, line: { color: B.rule, pt: 1 },
+    });
+    // orange top border
+    s2.addShape(pptx.ShapeType.rect, { x, y: 1.15, w: 3.06, h: 0.06, fill: { color: B.orange } });
+    s2.addText(k.lbl, {
+      x: x + 0.14, y: 1.28, w: 2.78, h: 0.38,
+      fontSize: 10, color: B.muted, fontFace: 'Arial', bold: false,
+    });
+    s2.addText(k.val, {
+      x: x + 0.14, y: 1.65, w: 2.78, h: 0.7,
+      fontSize: 26, bold: true, color: B.orange, fontFace: 'Arial',
+    });
+    s2.addText(k.note, {
+      x: x + 0.14, y: 2.35, w: 2.78, h: 0.55,
+      fontSize: 9, color: B.muted, fontFace: 'Arial',
+    });
+  });
+
+  // aEBIT turnaround table (left)
+  s2.addText('aEBIT Turnaround', {
+    x: 0.25, y: 3.25, w: 5.5, h: 0.42,
+    fontSize: 14, bold: true, color: B.white, fontFace: 'Arial',
+  });
+  rule(s2, 0.25, 3.7, 5.5);
+
+  const tRows = [
+    [
+      { text: 'Year', options: { bold: true, color: B.orange } },
+      { text: 'Ecommerce aEBIT', options: { bold: true, color: B.orange } },
+      { text: 'Group aEBIT', options: { bold: true, color: B.orange } },
+    ],
+    [{ text: 'FY22' }, { text: '(413)' }, { text: '(586)' }],
+    [{ text: 'FY23' }, { text: '(381)' }, { text: '(537)' }],
+    [{ text: 'FY24' }, { text: '38'    }, { text: '(118)' }],
+    [
+      { text: 'FY25', options: { bold: true, color: B.green } },
+      { text: '443',  options: { bold: true, color: B.green } },
+      { text: '179',  options: { bold: true, color: B.green } },
+    ],
+  ];
+  s2.addTable(tRows, {
+    x: 0.25, y: 3.78, w: 5.8,
+    fontSize: 12, color: B.muted, fontFace: 'Arial',
+    fill: { color: B.navyMid },
+    border: { type: 'solid', color: B.rule, pt: 1 },
+    rowH: 0.48,
+    align: 'center',
+    colW: [1.2, 2.3, 2.3],
+  });
+
+  // Revenue by region (right)
+  s2.addText('Revenue by Region (US$m)', {
+    x: 7.0, y: 3.25, w: 6.1, h: 0.42,
+    fontSize: 14, bold: true, color: B.white, fontFace: 'Arial',
+  });
+  rule(s2, 7.0, 3.7, 6.1);
+
+  const geos = [
+    { region: 'Eastern Europe', fy25: '2,816', fy24: '2,371', chg: '+19%' },
+    { region: 'Latin America',  fy25: '1,572', fy24: '1,495', chg: '+5%'  },
+    { region: 'Central Europe', fy25: '788',   fy24: '750',   chg: '+5%'  },
+    { region: 'Asia',           fy25: '718',   fy24: '601',   chg: '+19%' },
+    { region: 'North America',  fy25: '122',   fy24: '106',   chg: '+15%' },
+  ];
+
+  s2.addTable([
+    [
+      { text: 'Region',    options: { bold: true, color: B.orange } },
+      { text: 'FY25',      options: { bold: true, color: B.orange, align: 'right' } },
+      { text: 'FY24',      options: { bold: true, color: B.orange, align: 'right' } },
+      { text: 'Change',    options: { bold: true, color: B.orange, align: 'right' } },
+    ],
+    ...geos.map(g => [
+      { text: g.region },
+      { text: g.fy25,  options: { align: 'right' } },
+      { text: g.fy24,  options: { align: 'right', color: B.subtle } },
+      { text: g.chg,   options: { align: 'right', color: B.green, bold: true } },
+    ]),
+  ], {
+    x: 7.0, y: 3.78, w: 6.1,
+    fontSize: 11, color: B.muted, fontFace: 'Arial',
+    fill: { color: B.navyMid },
+    border: { type: 'solid', color: B.rule, pt: 1 },
+    rowH: 0.44,
+    colW: [2.4, 1.2, 1.2, 1.3],
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // SLIDE 3 — Business Segments
+  // ══════════════════════════════════════════════════════════════════════════════
+  const s3 = pptx.addSlide();
+  s3.background = { color: B.navy };
+  addHeader(s3, 'Business Segment Performance');
+
+  const segs = [
+    {
+      name: 'Food Delivery',      sub: 'iFood — Brazil',
+      rev: 'US$1.3bn', aebit: 'US$226m', margin: '+19.1% EBITDA margin',
+      kpi: '120M+ monthly orders  |  56M annual users  |  +29% orders YoY',
+      pos: true,
+    },
+    {
+      name: 'Classifieds',        sub: 'OLX — 9 markets',
+      rev: 'US$788m', aebit: 'US$273m', margin: '35% aEBIT margin',
+      kpi: '63.6M monthly app users  |  26.8M daily listings  |  Motors +24%',
+      pos: true,
+    },
+    {
+      name: 'Payments & Fintech', sub: 'PayU — India & Türkiye',
+      rev: 'US$1.1bn', aebit: '−US$31m', margin: 'iyzico aEBIT: US$18m',
+      kpi: 'iyzico +87% local rev  |  India H2 improving  |  Credit book US$558m',
+      pos: false,
+    },
+    {
+      name: 'Etail',              sub: 'eMAG — CEE',
+      rev: 'US$2.5bn', aebit: 'US$14m', margin: 'Turnaround: +US$40m vs FY24',
+      kpi: 'Romania aEBIT US$50m  |  GMV +15%  |  Sameday rev +38%',
+      pos: true,
+    },
+    {
+      name: 'Edtech',             sub: 'US & India',
+      rev: 'US$170m', aebit: '−US$33m', margin: 'Loss improved US$65m YoY',
+      kpi: 'Near cashflow breakeven  |  aEBIT −US$33m vs −US$98m',
+      pos: false,
+    },
+    {
+      name: 'Tencent',            sub: '23.5% associate stake',
+      rev: '—', aebit: 'US$5.7bn*', margin: '*Equity accounted results',
+      kpi: 'Non-IFRS profit +41%  |  WeChat 1.39bn MAU  |  Dividend US$1.0bn',
+      pos: true,
+    },
+  ];
+
+  const cols = 3;
+  segs.forEach((seg, i) => {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const x = 0.22 + col * 4.35;
+    const y = 1.15 + row * 2.95;
+
+    // Card background
+    s3.addShape(pptx.ShapeType.rect, {
+      x, y, w: 4.15, h: 2.75,
+      fill: { color: B.navyMid }, line: { color: B.rule, pt: 1 },
+    });
+    // Top accent line (orange if positive, subtle if loss)
+    s3.addShape(pptx.ShapeType.rect, {
+      x, y, w: 4.15, h: 0.06,
+      fill: { color: seg.pos ? B.orange : B.subtle },
+    });
+
+    // Segment name
+    s3.addText(seg.name, {
+      x: x + 0.15, y: y + 0.1, w: 3.85, h: 0.42,
+      fontSize: 14, bold: true, color: B.white, fontFace: 'Arial',
+    });
+    s3.addText(seg.sub, {
+      x: x + 0.15, y: y + 0.52, w: 3.85, h: 0.3,
+      fontSize: 9.5, color: B.muted, fontFace: 'Arial',
+    });
+
+    // Metrics row
+    s3.addText('Revenue', { x: x + 0.15, y: y + 0.9, w: 1.6, h: 0.28, fontSize: 9, color: B.muted, fontFace: 'Arial' });
+    s3.addText('aEBIT',   { x: x + 2.0,  y: y + 0.9, w: 2.0, h: 0.28, fontSize: 9, color: B.muted, fontFace: 'Arial' });
+    s3.addText(seg.rev, {
+      x: x + 0.15, y: y + 1.18, w: 1.8, h: 0.4,
+      fontSize: 15, bold: true, color: B.offwhite, fontFace: 'Arial',
+    });
+    s3.addText(seg.aebit, {
+      x: x + 2.0, y: y + 1.18, w: 2.0, h: 0.4,
+      fontSize: 15, bold: true, color: seg.pos ? B.green : B.orange, fontFace: 'Arial',
+    });
+    s3.addText(seg.margin, {
+      x: x + 0.15, y: y + 1.6, w: 3.85, h: 0.3,
+      fontSize: 9.5, color: B.orange, fontFace: 'Arial',
+    });
+
+    // Divider
+    s3.addShape(pptx.ShapeType.rect, { x: x + 0.15, y: y + 1.95, w: 3.85, h: 0.025, fill: { color: B.rule } });
+
+    s3.addText(seg.kpi, {
+      x: x + 0.15, y: y + 2.02, w: 3.85, h: 0.6,
+      fontSize: 9, color: B.muted, fontFace: 'Arial',
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // SLIDE 4 — Strategy & Outlook
+  // ══════════════════════════════════════════════════════════════════════════════
+  const s4 = pptx.addSlide();
+  s4.background = { color: B.navy };
+  addHeader(s4, 'Strategy & Outlook');
+
+  // ── Left: 3 strategic pillars ───────────────────────────────────────────────
+  s4.addText('Three Strategic Pillars', {
+    x: 0.25, y: 1.12, w: 6.1, h: 0.42,
+    fontSize: 13, bold: true, color: B.orange, fontFace: 'Arial', allCaps: true,
+  });
+  rule(s4, 0.25, 1.57, 6.1);
+
+  const pillars = [
+    {
+      n: '01', title: 'AI-First Businesses',
+      body: 'Toqan assistant: 20,000+ daily users, 11% avg productivity gain. Large Commerce Model (LCM) in development. 30+ portfolio companies deploying AI.',
+    },
+    {
+      n: '02', title: 'Regional Lifestyle Ecosystems',
+      body: 'LatAm: >100M customers, >US$25bn GMV (iFood + Despegar + OLX). India: Swiggy, PayU, Meesho, Urban Company. Europe: eMAG, OLX, iyzico + Just Eat.',
+    },
+    {
+      n: '03', title: 'Shareholder Value Creation',
+      body: 'Buyback: NAV/share +11% since Jun 2022, free float reduced 27%. Dividend doubled to 20¢/share. US$836m invested in ecosystems in FY25.',
+    },
+  ];
+
+  pillars.forEach((p, i) => {
+    const y = 1.7 + i * 1.75;
+    // number badge
+    s4.addShape(pptx.ShapeType.rect, { x: 0.25, y, w: 0.52, h: 0.52, fill: { color: B.orange } });
+    s4.addText(p.n, {
+      x: 0.25, y, w: 0.52, h: 0.52,
+      fontSize: 13, bold: true, color: B.white, align: 'center', valign: 'middle', fontFace: 'Arial',
+    });
+    s4.addText(p.title, {
+      x: 0.9, y: y + 0.04, w: 5.45, h: 0.42,
+      fontSize: 13, bold: true, color: B.white, fontFace: 'Arial',
+    });
+    s4.addText(p.body, {
+      x: 0.9, y: y + 0.5, w: 5.45, h: 1.0,
+      fontSize: 10.5, color: B.muted, fontFace: 'Arial',
+    });
+  });
+
+  // ── Vertical divider ────────────────────────────────────────────────────────
+  s4.addShape(pptx.ShapeType.rect, { x: 6.65, y: 1.1, w: 0.04, h: 6.2, fill: { color: B.rule } });
+
+  // ── Right: Key transactions + AI highlights ─────────────────────────────────
+  s4.addText('Key FY25 Transactions', {
+    x: 6.85, y: 1.12, w: 6.2, h: 0.42,
+    fontSize: 13, bold: true, color: B.orange, fontFace: 'Arial', allCaps: true,
+  });
+  rule(s4, 6.85, 1.57, 6.2);
+
+  const deals = [
+    { co: 'Despegar',              amt: 'US$1.7bn', note: 'LatAm travel leader — closes ecosystem for 100M+ customers; closed May 2025' },
+    { co: 'Just Eat Takeaway.com', amt: '€4.1bn',   note: 'AI-first European food delivery; 17 markets, 61M customers, 356K+ partners' },
+    { co: 'PayU / Mindgate',       amt: 'US$68m',   note: 'Real-time payments infrastructure in India' },
+    { co: 'iyzico / Paynet',       amt: 'US$87m',   note: 'Payments network expansion in Türkiye' },
+  ];
+
+  deals.forEach((d, i) => {
+    const y = 1.7 + i * 1.0;
+    s4.addShape(pptx.ShapeType.rect, {
+      x: 6.85, y, w: 6.2, h: 0.85,
+      fill: { color: B.navyMid }, line: { color: B.rule, pt: 1 },
+    });
+    // left orange tag
+    s4.addShape(pptx.ShapeType.rect, { x: 6.85, y, w: 0.06, h: 0.85, fill: { color: B.orange } });
+    s4.addText(d.co, {
+      x: 7.05, y: y + 0.06, w: 3.8, h: 0.36,
+      fontSize: 12, bold: true, color: B.white, fontFace: 'Arial',
+    });
+    s4.addText(d.amt, {
+      x: 10.9, y: y + 0.06, w: 2.0, h: 0.36,
+      fontSize: 14, bold: true, color: B.orange, align: 'right', fontFace: 'Arial',
+    });
+    s4.addText(d.note, {
+      x: 7.05, y: y + 0.44, w: 5.85, h: 0.36,
+      fontSize: 9.5, color: B.muted, fontFace: 'Arial',
+    });
+  });
+
+  // AI highlight box
+  s4.addShape(pptx.ShapeType.rect, {
+    x: 6.85, y: 5.85, w: 6.2, h: 1.45,
+    fill: { color: B.navyLt }, line: { color: B.orange, pt: 1.5 },
+  });
+  s4.addText('AI Adoption in FY25', {
+    x: 7.05, y: 5.93, w: 5.85, h: 0.36,
+    fontSize: 12, bold: true, color: B.orange, fontFace: 'Arial',
+  });
+  s4.addText(
+    '• iFood: 56% customer support automated; fraud chargebacks 0.1%; support cost −40%\n' +
+    '• OLX Magic: conversational AI buying experience launched across classifieds\n' +
+    '• Ventures: US$88m deployed into AI startups across 40+ transactions in FY25',
+    {
+      x: 7.05, y: 6.3, w: 5.85, h: 0.9,
+      fontSize: 10, color: B.muted, fontFace: 'Arial',
+    }
+  );
+
+  // ─── Write file ──────────────────────────────────────────────────────────────
+  await pptx.writeFile({ fileName: 'prosus_fy2025_overview.pptx' });
+  console.log('Saved: prosus_fy2025_overview.pptx');
+}
+
+main().catch(err => { console.error(err); process.exit(1); });
