@@ -1,93 +1,119 @@
 'use client';
-import { useState, useMemo } from 'react';
-import { RegulatoryMatter, RiskLevel, MatterStatus } from '@/lib/types';
-import { ChevronDown, ChevronUp, AlertTriangle, Lock, ChevronRight } from 'lucide-react';
 
-const riskClass: Record<RiskLevel, string> = {
-  Critical: 'badge-critical',
-  High: 'badge-high',
-  Medium: 'badge-medium',
-  Low: 'badge-low',
-};
-
-const statusClass: Record<MatterStatus, string> = {
-  'Under Investigation': 'status-under-investigation',
-  'Litigation': 'status-litigation',
-  'Settlement Negotiations': 'status-settlement',
-  'Resolved': 'status-resolved',
-  'Monitoring': 'status-monitoring',
-};
-
-function formatAmount(n: number) {
-  if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(1)}B`;
-  return `$${(n / 1_000_000).toFixed(0)}M`;
-}
-
-function formatDate(s: string) {
-  return new Date(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-}
-
-const COMPANY_COLORS: Record<string, string> = {
-  iFood: 'bg-red-500',
-  Meesho: 'bg-pink-500',
-  OLX: 'bg-blue-500',
-  Swiggy: 'bg-orange-500',
-  Brainly: 'bg-purple-500',
-  PayU: 'bg-cyan-500',
-  Udemy: 'bg-violet-500',
-  'Stack Overflow': 'bg-amber-500',
-  eMAG: 'bg-emerald-500',
-  Takealot: 'bg-teal-500',
-};
+import { useState } from 'react';
+import { ChevronUp, ChevronDown, ChevronsUpDown, ChevronRight } from 'lucide-react';
+import { RegulatoryMatter } from '@/lib/types';
+import clsx from 'clsx';
 
 interface Props {
   matters: RegulatoryMatter[];
-  searchQuery: string;
-  areaFilter: string;
-  statusFilter: string;
-  companyFilter: string;
 }
 
-type SortKey = 'riskScore' | 'potentialExposureAmount' | 'dateStarted' | 'companyName';
+type SortKey = keyof RegulatoryMatter;
+type SortDir = 'asc' | 'desc';
 
-export default function MattersTable({ matters, searchQuery, areaFilter, statusFilter, companyFilter }: Props) {
-  const [expanded, setExpanded] = useState<string | null>(null);
+function formatExposure(amount: number): string {
+  if (amount >= 1_000_000_000) return `$${(amount / 1_000_000_000).toFixed(1)}B`;
+  if (amount >= 1_000_000) return `$${Math.round(amount / 1_000_000)}M`;
+  return `$${amount.toLocaleString()}`;
+}
+
+function RiskBadge({ level, score, rationale }: { level: string; score: number; rationale: string }) {
+  const [showTooltip, setShowTooltip] = useState(false);
+  const cls = clsx('px-2 py-1 rounded-md text-xs font-semibold inline-flex items-center gap-1.5 cursor-help relative', {
+    'badge-critical': level === 'Critical',
+    'badge-high': level === 'High',
+    'badge-medium': level === 'Medium',
+    'badge-low': level === 'Low',
+  });
+  return (
+    <div className="relative inline-block">
+      <span
+        className={cls}
+        onMouseEnter={() => setShowTooltip(true)}
+        onMouseLeave={() => setShowTooltip(false)}
+      >
+        <span className="font-mono">{score}</span>
+        <span className="opacity-60">|</span>
+        {level}
+      </span>
+      {showTooltip && (
+        <div
+          className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 p-3 rounded-lg text-xs text-slate-200 shadow-2xl"
+          style={{ background: '#0d1526', border: '1px solid rgba(59,130,246,0.3)' }}
+        >
+          <div className="font-semibold text-blue-300 mb-1">Risk Rationale</div>
+          {rationale}
+          <div
+            className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent"
+            style={{ borderTopColor: 'rgba(59,130,246,0.3)' }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const cls = clsx('px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap', {
+    'status-under-investigation': status === 'Under Investigation',
+    'status-litigation': status === 'Litigation',
+    'status-settlement': status === 'Settlement Negotiations',
+    'status-resolved': status === 'Resolved',
+    'status-monitoring': status === 'Monitoring',
+  });
+  return <span className={cls}>{status}</span>;
+}
+
+function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
+  if (col !== sortKey) return <ChevronsUpDown size={13} className="text-slate-600" />;
+  return sortDir === 'asc' ? <ChevronUp size={13} className="text-blue-400" /> : <ChevronDown size={13} className="text-blue-400" />;
+}
+
+export default function MattersTable({ matters }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('riskScore');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const filtered = useMemo(() => {
-    let list = matters;
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter(m =>
-        m.companyName.toLowerCase().includes(q) ||
-        m.caseNumber.toLowerCase().includes(q) ||
-        m.regulator.toLowerCase().includes(q) ||
-        m.summary.toLowerCase().includes(q) ||
-        m.area.toLowerCase().includes(q)
-      );
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir('desc');
     }
-    if (areaFilter) list = list.filter(m => m.area === areaFilter);
-    if (statusFilter) list = list.filter(m => m.status === statusFilter);
-    if (companyFilter) list = list.filter(m => m.companyName === companyFilter);
+  };
 
-    return [...list].sort((a, b) => {
-      const av = a[sortKey] as string | number;
-      const bv = b[sortKey] as string | number;
-      if (av < bv) return sortDir === 'asc' ? -1 : 1;
-      if (av > bv) return sortDir === 'asc' ? 1 : -1;
-      return 0;
-    });
-  }, [matters, searchQuery, areaFilter, statusFilter, companyFilter, sortKey, sortDir]);
+  const sorted = [...matters].sort((a, b) => {
+    const av = a[sortKey];
+    const bv = b[sortKey];
+    if (typeof av === 'number' && typeof bv === 'number') {
+      return sortDir === 'asc' ? av - bv : bv - av;
+    }
+    const as = String(av);
+    const bs = String(bv);
+    return sortDir === 'asc' ? as.localeCompare(bs) : bs.localeCompare(as);
+  });
 
-  function toggleSort(key: SortKey) {
-    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortKey(key); setSortDir('desc'); }
-  }
+  const cols: { key: SortKey; label: string; className?: string }[] = [
+    { key: 'caseNumber', label: 'Case #' },
+    { key: 'companyName', label: 'Company' },
+    { key: 'regulator', label: 'Regulator' },
+    { key: 'jurisdiction', label: 'Jurisdiction' },
+    { key: 'area', label: 'Area' },
+    { key: 'potentialExposureAmount', label: 'Exposure', className: 'text-right' },
+    { key: 'potentialExposureCriminal', label: 'Criminal' },
+    { key: 'riskScore', label: 'Risk' },
+    { key: 'status', label: 'Status' },
+    { key: 'lastUpdated', label: 'Updated' },
+  ];
 
-  function SortIcon({ k }: { k: SortKey }) {
-    if (sortKey !== k) return <ChevronUp size={12} className="opacity-20" />;
-    return sortDir === 'desc' ? <ChevronDown size={12} className="text-blue-400" /> : <ChevronUp size={12} className="text-blue-400" />;
+  if (matters.length === 0) {
+    return (
+      <div className="glass rounded-xl p-16 text-center">
+        <div className="text-slate-500 text-sm">No matters match your current filters.</div>
+      </div>
+    );
   }
 
   return (
@@ -95,147 +121,126 @@ export default function MattersTable({ matters, searchQuery, areaFilter, statusF
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-800/60">
-              {[
-                { label: 'Case #', key: null },
-                { label: 'Company', key: 'companyName' as SortKey },
-                { label: 'Date', key: 'dateStarted' as SortKey },
-                { label: 'Regulator', key: null },
-                { label: 'Area', key: null },
-                { label: 'Summary', key: null },
-                { label: 'Exposure', key: 'potentialExposureAmount' as SortKey },
-                { label: 'Risk', key: 'riskScore' as SortKey },
-                { label: 'Status', key: null },
-                { label: '', key: null },
-              ].map(({ label, key }) => (
+            <tr style={{ borderBottom: '1px solid rgba(59,130,246,0.1)', background: 'rgba(4,9,26,0.6)' }}>
+              <th className="w-8" />
+              {cols.map(col => (
                 <th
-                  key={label}
-                  className={`px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap ${key ? 'cursor-pointer hover:text-slate-300 select-none' : ''}`}
-                  onClick={() => key && toggleSort(key)}
+                  key={col.key}
+                  className={clsx(
+                    'px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider cursor-pointer hover:text-blue-300 select-none transition-colors whitespace-nowrap',
+                    col.className
+                  )}
+                  onClick={() => handleSort(col.key)}
                 >
-                  <span className="flex items-center gap-1">
-                    {label}
-                    {key && <SortIcon k={key} />}
+                  <span className="inline-flex items-center gap-1.5">
+                    {col.label}
+                    <SortIcon col={col.key} sortKey={sortKey} sortDir={sortDir} />
                   </span>
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {filtered.map((m, i) => (
-              <>
-                <tr
-                  key={m.id}
-                  className={`table-row-hover border-b border-slate-800/40 cursor-pointer fade-in ${m.status === 'Resolved' ? 'opacity-60' : ''}`}
-                  style={{ animationDelay: `${i * 40}ms`, animationFillMode: 'both' }}
-                  onClick={() => setExpanded(expanded === m.id ? null : m.id)}
-                >
-                  <td className="px-4 py-3 font-mono text-xs text-slate-400">{m.caseNumber}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${COMPANY_COLORS[m.companyName] ?? 'bg-slate-500'}`} />
-                      <span className="font-medium text-slate-200 whitespace-nowrap">{m.companyName}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-slate-400 whitespace-nowrap">{formatDate(m.dateStarted)}</td>
-                  <td className="px-4 py-3">
-                    <div className="text-slate-300 whitespace-nowrap">{m.regulator}</div>
-                    <div className="text-xs text-slate-500">{m.jurisdiction}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="badge area-badge">{m.area}</span>
-                  </td>
-                  <td className="px-4 py-3 max-w-xs">
-                    <p className="text-slate-400 text-xs leading-relaxed line-clamp-2">{m.summary}</p>
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <div className="font-semibold text-slate-200">{formatAmount(m.potentialExposureAmount)}</div>
-                    {m.potentialExposureCriminal && (
-                      <div className="flex items-center gap-1 text-xs text-red-400 mt-0.5">
-                        <Lock size={10} />
-                        <span>Criminal</span>
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="tooltip-trigger">
-                      <span className={`badge ${riskClass[m.riskLevel]}`}>
-                        {m.riskLevel === 'Critical' && <AlertTriangle size={10} />}
-                        {m.riskLevel} · {m.riskScore}
+            {sorted.map((matter, idx) => {
+              const isExpanded = expandedId === matter.id;
+              const isEven = idx % 2 === 0;
+              return (
+                <>
+                  <tr
+                    key={matter.id}
+                    className="cursor-pointer transition-all group"
+                    style={{
+                      background: isEven ? 'rgba(7,13,26,0.4)' : 'rgba(13,21,38,0.3)',
+                      borderBottom: '1px solid rgba(30,53,97,0.2)',
+                    }}
+                    onClick={() => setExpandedId(isExpanded ? null : matter.id)}
+                    onMouseEnter={e => {
+                      (e.currentTarget as HTMLElement).style.background = 'rgba(30,53,97,0.3)';
+                    }}
+                    onMouseLeave={e => {
+                      (e.currentTarget as HTMLElement).style.background = isEven ? 'rgba(7,13,26,0.4)' : 'rgba(13,21,38,0.3)';
+                    }}
+                  >
+                    <td className="pl-4 pr-1 py-3.5">
+                      <ChevronRight
+                        size={14}
+                        className={clsx('text-slate-500 transition-transform', { 'rotate-90 text-blue-400': isExpanded })}
+                      />
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <span className="font-mono text-xs text-slate-400">{matter.caseNumber}</span>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <span className="font-semibold text-slate-100">{matter.companyName}</span>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <span className="text-slate-300">{matter.regulator}</span>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <span className="text-slate-400 text-xs">{matter.jurisdiction}</span>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <span className="text-xs px-2 py-1 rounded" style={{ background: 'rgba(59,130,246,0.08)', color: '#93c5fd', border: '1px solid rgba(59,130,246,0.15)' }}>
+                        {matter.area}
                       </span>
-                      <div className="tooltip-content">{m.riskRationale}</div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`badge ${statusClass[m.status]}`}>{m.status}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <ChevronRight
-                      size={16}
-                      className={`text-slate-600 transition-transform duration-200 ${expanded === m.id ? 'rotate-90 text-blue-400' : ''}`}
-                    />
-                  </td>
-                </tr>
-                {expanded === m.id && (
-                  <tr key={`${m.id}-expanded`} className="bg-navy-800/50">
-                    <td colSpan={10} className="px-6 py-5">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                          <h4 className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">Full Summary</h4>
-                          <p className="text-slate-300 text-sm leading-relaxed">{m.summary}</p>
-                          <div className="mt-4">
-                            <h4 className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">Exposure Details</h4>
-                            <p className="text-slate-300 text-sm leading-relaxed">{m.exposureDescription}</p>
-                          </div>
-                        </div>
-                        <div>
-                          <h4 className="text-xs font-semibold text-purple-400 uppercase tracking-wider mb-2">AI Risk Assessment</h4>
-                          <div className={`inline-flex items-center gap-2 badge ${riskClass[m.riskLevel]} mb-3`}>
-                            {m.riskLevel === 'Critical' && <AlertTriangle size={12} />}
-                            {m.riskLevel} Risk · Score {m.riskScore}/100
-                          </div>
-                          <p className="text-slate-300 text-sm leading-relaxed">{m.riskRationale}</p>
-                          <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
-                            <div>
-                              <span className="text-slate-500">Submitted by</span>
-                              <div className="text-slate-300 mt-0.5">{m.submittedBy}</div>
-                            </div>
-                            <div>
-                              <span className="text-slate-500">Last updated</span>
-                              <div className="text-slate-300 mt-0.5">{formatDate(m.lastUpdated)}</div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+                    </td>
+                    <td className="px-4 py-3.5 text-right">
+                      <span className="font-semibold text-slate-200 font-mono">{formatExposure(matter.potentialExposureAmount)}</span>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      {matter.potentialExposureCriminal && (
+                        <span className="text-xs px-2 py-1 rounded font-semibold" style={{ background: 'rgba(239,68,68,0.15)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.3)' }}>
+                          Criminal
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <RiskBadge level={matter.riskLevel} score={matter.riskScore} rationale={matter.riskRationale} />
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <StatusBadge status={matter.status} />
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <span className="text-xs text-slate-500 font-mono">{matter.lastUpdated}</span>
                     </td>
                   </tr>
-                )}
-              </>
-            ))}
+                  {isExpanded && (
+                    <tr key={`${matter.id}-expanded`} className="slide-in">
+                      <td colSpan={11} style={{ background: 'rgba(4,9,26,0.8)', borderBottom: '1px solid rgba(59,130,246,0.15)' }}>
+                        <div className="px-8 py-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                          <div>
+                            <h4 className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">Case Summary</h4>
+                            <p className="text-slate-300 text-sm leading-relaxed">{matter.summary}</p>
+                          </div>
+                          <div className="space-y-4">
+                            <div>
+                              <h4 className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">Risk Rationale</h4>
+                              <p className="text-slate-300 text-sm leading-relaxed">{matter.riskRationale}</p>
+                            </div>
+                            <div>
+                              <h4 className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">Exposure Description</h4>
+                              <p className="text-slate-400 text-sm">{matter.exposureDescription}</p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3 text-xs">
+                              <div><span className="text-slate-500">Date Started:</span> <span className="text-slate-300 ml-1">{matter.dateStarted}</span></div>
+                              <div><span className="text-slate-500">Submitted by:</span> <span className="text-slate-300 ml-1">{matter.submittedBy}</span></div>
+                              <div><span className="text-slate-500">Case Number:</span> <span className="text-slate-300 font-mono ml-1">{matter.caseNumber}</span></div>
+                              <div><span className="text-slate-500">Last Updated:</span> <span className="text-slate-300 font-mono ml-1">{matter.lastUpdated}</span></div>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </>
+              );
+            })}
           </tbody>
         </table>
-        {filtered.length === 0 && (
-          <div className="text-center py-16 text-slate-500">
-            <FileText size={32} className="mx-auto mb-3 opacity-30" />
-            <p>No matters match your filters</p>
-          </div>
-        )}
       </div>
-      <div className="px-4 py-3 border-t border-slate-800/60 text-xs text-slate-500">
-        Showing {filtered.length} of {matters.length} matters · Click a row to expand details · Hover risk badge for AI rationale
+      <div className="px-6 py-3 text-xs text-slate-500 border-t border-blue-900/20">
+        {matters.length} matter{matters.length !== 1 ? 's' : ''} - Click any row to expand details
       </div>
     </div>
-  );
-}
-
-function FileText(props: { size: number; className?: string }) {
-  return (
-    <svg width={props.size} height={props.size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.className}>
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-      <polyline points="14 2 14 8 20 8"/>
-      <line x1="16" y1="13" x2="8" y2="13"/>
-      <line x1="16" y1="17" x2="8" y2="17"/>
-      <polyline points="10 9 9 9 8 9"/>
-    </svg>
   );
 }

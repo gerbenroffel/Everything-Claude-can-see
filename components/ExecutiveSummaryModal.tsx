@@ -1,6 +1,7 @@
 'use client';
-import { useState } from 'react';
-import { X, Sparkles, Copy, Check, Loader2 } from 'lucide-react';
+
+import { useState, useEffect } from 'react';
+import { X, Copy, CheckCheck } from 'lucide-react';
 
 interface Props {
   onClose: () => void;
@@ -11,82 +12,80 @@ export default function ExecutiveSummaryModal({ onClose }: Props) {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
 
-  useState(() => {
-    fetch('/api/ai/summary', { method: 'POST' })
-      .then(r => r.json())
-      .then(d => { setSummary(d.summary); setLoading(false); })
-      .catch(() => { setSummary('Unable to generate summary. Please check your API key configuration.'); setLoading(false); });
-  });
+  useEffect(() => {
+    const generate = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch('/api/ai/summary', { method: 'POST' });
+        const data = await res.json();
+        setSummary(data.summary || 'Unable to generate summary.');
+      } catch {
+        setSummary('An error occurred while generating the executive summary.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    generate();
+  }, []);
 
-  async function copy() {
+  const handleCopy = async () => {
     await navigator.clipboard.writeText(summary);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }
-
-  const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-      <div className="relative glass rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl shadow-black/60 slide-up">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
+      <div
+        className="w-full max-w-2xl rounded-2xl shadow-2xl fade-in max-h-[80vh] flex flex-col"
+        style={{ background: '#0d1526', border: '1px solid rgba(59,130,246,0.25)' }}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800/60">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center">
-              <Sparkles size={18} className="text-purple-400" />
-            </div>
-            <div>
-              <h2 className="text-base font-semibold text-slate-200">Executive Summary</h2>
-              <p className="text-xs text-slate-500">AI-generated · {today}</p>
-            </div>
+        <div className="flex items-center justify-between px-6 py-5" style={{ borderBottom: '1px solid rgba(59,130,246,0.15)' }}>
+          <div>
+            <h2 className="text-lg font-semibold text-white">Executive Summary</h2>
+            <p className="text-xs text-slate-500 mt-0.5">{new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
           </div>
           <div className="flex items-center gap-2">
             {!loading && summary && (
               <button
-                onClick={copy}
-                className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 bg-slate-800/60 hover:bg-slate-700/60 border border-slate-700/60 rounded-lg px-3 py-1.5 transition-all"
+                onClick={handleCopy}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all"
+                style={{ background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.2)', color: copied ? '#86efac' : '#93c5fd' }}
               >
-                {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+                {copied ? <CheckCheck size={14} /> : <Copy size={14} />}
                 {copied ? 'Copied!' : 'Copy'}
               </button>
             )}
-            <button onClick={onClose} className="text-slate-500 hover:text-slate-300 transition-colors">
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg hover:bg-blue-900/30 text-slate-400 hover:text-white transition-all"
+            >
               <X size={18} />
             </button>
           </div>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex-1 overflow-y-auto px-6 py-6">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-16 gap-4">
-              <div className="w-12 h-12 rounded-full bg-purple-600/10 border border-purple-500/20 flex items-center justify-center">
-                <Loader2 size={22} className="text-purple-400 animate-spin" />
-              </div>
-              <div className="text-center">
-                <p className="text-slate-300 text-sm font-medium">Generating executive summary…</p>
-                <p className="text-slate-500 text-xs mt-1">Analysing all portfolio matters with AI</p>
-              </div>
+              <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              <div className="text-slate-400 text-sm">Generating board-ready executive summary...</div>
+              <div className="text-slate-600 text-xs">Analysing all regulatory matters with AI</div>
             </div>
           ) : (
-            <div className="prose prose-invert prose-sm max-w-none">
-              {summary.split('\n\n').map((para, i) => (
-                <p key={i} className="text-slate-300 text-sm leading-7 mb-4 last:mb-0">
-                  {para}
-                </p>
-              ))}
+            <div className="prose prose-invert max-w-none">
+              <div className="text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">
+                {summary}
+              </div>
             </div>
           )}
         </div>
-
-        {/* Footer note */}
-        {!loading && (
-          <div className="px-6 py-3 border-t border-slate-800/60 flex items-center gap-2 text-xs text-slate-600">
-            <Sparkles size={11} />
-            Generated by Claude AI · For internal use only · Not legal advice
-          </div>
-        )}
       </div>
     </div>
   );

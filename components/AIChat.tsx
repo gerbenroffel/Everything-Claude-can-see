@@ -1,17 +1,17 @@
 'use client';
+
 import { useState, useRef, useEffect } from 'react';
-import { MessageCircle, X, Send, Sparkles } from 'lucide-react';
+import { MessageCircle, X, Send } from 'lucide-react';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
 }
 
-const SUGGESTIONS = [
-  'What is our total financial exposure across all open matters?',
-  'Which companies face criminal liability?',
-  'Summarize the most critical matters for the board',
-  'Which matters are in settlement negotiations?',
+const SUGGESTED_QUESTIONS = [
+  'What are the highest risk matters?',
+  'Summarize our Brazil exposure',
+  'Which matters have criminal risk?',
 ];
 
 export default function AIChat() {
@@ -19,27 +19,19 @@ export default function AIChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (open && messages.length === 0) {
-      setMessages([{
-        role: 'assistant',
-        content: 'Hello, I\'m your AI Regulatory Assistant. I have full context on all portfolio matters. Ask me anything about your regulatory exposure, risk profile, or specific cases.',
-      }]);
-    }
-  }, [open, messages.length]);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, loading]);
-
-  async function send(question: string) {
+  const sendMessage = async (question: string) => {
     if (!question.trim() || loading) return;
     const userMsg: Message = { role: 'user', content: question };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setLoading(true);
+
     try {
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
@@ -47,115 +39,125 @@ export default function AIChat() {
         body: JSON.stringify({ question }),
       });
       const data = await res.json();
-      setMessages(prev => [...prev, { role: 'assistant', content: data.answer }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: data.answer || 'Sorry, I could not generate a response.' }]);
     } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, I encountered an error. Please try again.' }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: 'An error occurred. Please try again.' }]);
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   return (
     <>
       {/* Floating button */}
       {!open && (
-        <button
-          onClick={() => setOpen(true)}
-          className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center shadow-lg shadow-blue-500/30 pulse-ring transition-colors"
-          aria-label="Open AI Assistant"
-        >
-          <Sparkles size={22} />
-        </button>
+        <div className="fixed bottom-6 right-6 z-50">
+          <div className="relative">
+            <div
+              className="absolute inset-0 rounded-full bg-blue-500 opacity-40"
+              style={{ animation: 'pulse-ring 2s ease-out infinite' }}
+            />
+            <button
+              onClick={() => setOpen(true)}
+              className="relative w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-500 flex items-center justify-center shadow-2xl shadow-blue-900/50 transition-all hover:scale-105"
+            >
+              <MessageCircle size={22} className="text-white" />
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Chat panel */}
       {open && (
-        <div className="fixed bottom-6 right-6 z-50 w-96 h-[560px] flex flex-col glass rounded-2xl shadow-2xl shadow-black/50 slide-up overflow-hidden">
+        <div
+          className="fixed bottom-6 right-6 z-50 flex flex-col rounded-2xl shadow-2xl shadow-black/60 slide-in"
+          style={{
+            width: 400,
+            height: 520,
+            background: 'rgba(7,13,26,0.97)',
+            border: '1px solid rgba(59,130,246,0.25)',
+            backdropFilter: 'blur(20px)',
+          }}
+        >
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800/60 bg-navy-800/60">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-blue-600/20 border border-blue-500/30 flex items-center justify-center">
-                <Sparkles size={14} className="text-blue-400" />
-              </div>
-              <div>
-                <div className="text-sm font-semibold text-slate-200">AI Regulatory Assistant</div>
-                <div className="text-xs text-slate-500">Powered by Claude</div>
-              </div>
+          <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid rgba(59,130,246,0.15)' }}>
+            <div>
+              <div className="font-semibold text-white text-sm">AI Regulatory Assistant</div>
+              <div className="text-xs text-slate-500">Powered by Claude</div>
             </div>
-            <button onClick={() => setOpen(false)} className="text-slate-500 hover:text-slate-300 transition-colors">
-              <X size={18} />
+            <button
+              onClick={() => setOpen(false)}
+              className="p-1.5 rounded-lg hover:bg-blue-900/30 text-slate-400 hover:text-white transition-all"
+            >
+              <X size={16} />
             </button>
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {messages.map((m, i) => (
-              <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+            {messages.length === 0 && (
+              <div className="space-y-3">
+                <div className="text-xs text-slate-500 text-center">Ask about your regulatory portfolio</div>
+                {SUGGESTED_QUESTIONS.map(q => (
+                  <button
+                    key={q}
+                    onClick={() => sendMessage(q)}
+                    className="w-full text-left px-3 py-2.5 rounded-lg text-xs text-slate-300 hover:text-white transition-all"
+                    style={{ background: 'rgba(30,53,97,0.3)', border: '1px solid rgba(59,130,246,0.15)' }}
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            )}
+            {messages.map((msg, i) => (
+              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div
-                  className={`max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed ${
-                    m.role === 'user'
-                      ? 'bg-blue-600/80 text-white'
-                      : 'bg-navy-700/80 border border-slate-800/60 text-slate-300'
+                  className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
+                    msg.role === 'user'
+                      ? 'bg-blue-600 text-white rounded-br-sm'
+                      : 'text-slate-200 rounded-bl-sm'
                   }`}
+                  style={msg.role === 'assistant' ? { background: 'rgba(13,21,38,0.8)', border: '1px solid rgba(59,130,246,0.15)' } : {}}
                 >
-                  {m.content}
+                  {msg.content}
                 </div>
               </div>
             ))}
             {loading && (
               <div className="flex justify-start">
-                <div className="bg-navy-700/80 border border-slate-800/60 rounded-xl px-4 py-3">
-                  <div className="flex gap-1.5 items-center">
+                <div className="px-4 py-3 rounded-2xl rounded-bl-sm" style={{ background: 'rgba(13,21,38,0.8)', border: '1px solid rgba(59,130,246,0.15)' }}>
+                  <div className="flex gap-1.5">
                     {[0, 1, 2].map(i => (
-                      <span
-                        key={i}
-                        className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce"
-                        style={{ animationDelay: `${i * 150}ms` }}
-                      />
+                      <div key={i} className="w-1.5 h-1.5 rounded-full bg-blue-400" style={{ animation: `pulse 1s ease-in-out ${i * 0.2}s infinite` }} />
                     ))}
                   </div>
                 </div>
               </div>
             )}
-            {/* Suggestions — show only when no user messages yet */}
-            {messages.length === 1 && (
-              <div className="space-y-1.5 pt-1">
-                <p className="text-xs text-slate-600 px-1">Suggested questions:</p>
-                {SUGGESTIONS.map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => send(s)}
-                    className="w-full text-left text-xs text-slate-400 hover:text-slate-200 bg-navy-700/40 hover:bg-navy-700/80 border border-slate-800/60 rounded-lg px-3 py-2 transition-all"
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div ref={bottomRef} />
+            <div ref={messagesEndRef} />
           </div>
 
           {/* Input */}
-          <div className="p-3 border-t border-slate-800/60">
-            <form
-              onSubmit={e => { e.preventDefault(); send(input); }}
-              className="flex gap-2"
-            >
+          <div className="px-4 pb-4" style={{ borderTop: '1px solid rgba(59,130,246,0.1)', paddingTop: 12 }}>
+            <div className="flex gap-2">
               <input
-                className="input-dark flex-1 rounded-xl px-3 py-2 text-sm"
-                placeholder="Ask about your regulatory matters…"
                 value={input}
                 onChange={e => setInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage(input)}
+                placeholder="Ask about regulatory matters..."
+                className="flex-1 px-3.5 py-2.5 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none transition-all"
+                style={{ background: 'rgba(13,21,38,0.8)', border: '1px solid rgba(59,130,246,0.2)' }}
                 disabled={loading}
               />
               <button
-                type="submit"
-                disabled={!input.trim() || loading}
-                className="w-9 h-9 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors flex-shrink-0"
+                onClick={() => sendMessage(input)}
+                disabled={loading || !input.trim()}
+                className="p-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <Send size={15} className="text-white" />
+                <Send size={16} />
               </button>
-            </form>
+            </div>
           </div>
         </div>
       )}
