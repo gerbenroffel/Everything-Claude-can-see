@@ -1,26 +1,25 @@
 'use client';
+
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Shield, CheckCircle, AlertTriangle, Loader2 } from 'lucide-react';
+import { ArrowLeft, CheckCircle } from 'lucide-react';
 import { RegulatoryArea, MatterStatus, RiskLevel } from '@/lib/types';
+import clsx from 'clsx';
 
-const COMPANIES = ['iFood', 'Meesho', 'OLX', 'Swiggy', 'Brainly', 'PayU', 'Udemy', 'Stack Overflow', 'eMAG', 'Takealot'];
+const COMPANIES = [
+  'OLX Brazil', 'OLX Germany', 'Swiggy', 'iFood', 'PayU India', 
+  'PayU Canada', 'Udemy', 'Stack Overflow', 'eMAG', 'Takealot', 
+  'Meesho', 'Brainly', 'Other'
+];
+
 const AREAS: RegulatoryArea[] = ['Competition', 'Consumer Protection', 'Data Privacy', 'Financial Services', 'Tax', 'Employment', 'Antitrust', 'Securities'];
 const STATUSES: MatterStatus[] = ['Under Investigation', 'Litigation', 'Settlement Negotiations', 'Resolved', 'Monitoring'];
 
-const riskColors: Record<RiskLevel, string> = {
-  Critical: 'text-red-400 border-red-500/30 bg-red-500/10',
-  High: 'text-orange-400 border-orange-500/30 bg-orange-500/10',
-  Medium: 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10',
-  Low: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10',
-};
-
 interface SubmitResult {
-  id: string;
-  caseNumber: string;
   riskLevel: RiskLevel;
   riskScore: number;
   riskRationale: string;
+  caseNumber: string;
 }
 
 export default function SubmitPage() {
@@ -42,11 +41,15 @@ export default function SubmitPage() {
   const [result, setResult] = useState<SubmitResult | null>(null);
   const [error, setError] = useState('');
 
-  function set(key: string, value: string | boolean) {
-    setForm(f => ({ ...f, [key]: value }));
-  }
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const target = e.target as HTMLInputElement;
+    setForm(prev => ({
+      ...prev,
+      [e.target.name]: target.type === 'checkbox' ? target.checked : e.target.value,
+    }));
+  };
 
-  async function handleSubmit(e: React.FormEvent) {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     setError('');
@@ -54,48 +57,60 @@ export default function SubmitPage() {
       const res = await fetch('/api/matters', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...form,
-          potentialExposureAmount: Number(form.potentialExposureAmount) * 1_000_000,
-        }),
+        body: JSON.stringify(form),
       });
       if (!res.ok) throw new Error('Submission failed');
       const data = await res.json();
-      setResult(data);
-    } catch {
-      setError('Submission failed. Please try again.');
+      setResult({
+        riskLevel: data.riskLevel,
+        riskScore: data.riskScore,
+        riskRationale: data.riskRationale,
+        caseNumber: data.caseNumber,
+      });
+    } catch (err) {
+      setError('Failed to submit matter. Please try again.');
     } finally {
       setSubmitting(false);
     }
-  }
+  };
+
+  const inputClass = "w-full px-4 py-2.5 rounded-lg text-sm text-slate-200 placeholder-slate-500 focus:outline-none transition-all";
+  const inputStyle = { background: 'rgba(7,13,26,0.7)', border: '1px solid rgba(59,130,246,0.2)' };
+  const inputFocusStyle = 'focus:ring-1 focus:ring-blue-500/50';
+  const labelClass = "block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5";
 
   if (result) {
+    const riskColors: Record<RiskLevel, string> = {
+      Critical: '#ef4444', High: '#f97316', Medium: '#eab308', Low: '#22c55e',
+    };
     return (
-      <div className="min-h-screen flex items-center justify-center p-6" style={{ background: 'linear-gradient(180deg, #04091a 0%, #070d1a 100%)' }}>
-        <div className="glass rounded-2xl p-8 max-w-lg w-full text-center slide-up">
-          <div className="w-14 h-14 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mx-auto mb-4">
-            <CheckCircle size={28} className="text-emerald-400" />
+      <div className="min-h-screen flex items-center justify-center p-6" style={{ background: '#070d1a' }}>
+        <div className="glass rounded-2xl p-10 max-w-lg w-full text-center fade-in">
+          <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6" style={{ background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)' }}>
+            <CheckCircle size={32} className="text-green-400" />
           </div>
-          <h2 className="text-xl font-bold text-slate-200 mb-1">Matter Submitted</h2>
-          <p className="text-slate-500 text-sm mb-6">Case {result.caseNumber} has been registered and risk-assessed</p>
-
-          <div className={`rounded-xl border p-5 mb-6 ${riskColors[result.riskLevel]}`}>
-            <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle size={18} />
-              <span className="font-bold text-lg">AI Risk Assessment</span>
+          <h2 className="text-2xl font-bold text-white mb-2">Matter Submitted</h2>
+          <p className="text-slate-400 text-sm mb-6">Case number: <span className="text-blue-300 font-mono">{result.caseNumber}</span></p>
+          
+          <div className="rounded-xl p-5 mb-6 text-left" style={{ background: 'rgba(4,9,26,0.6)', border: `1px solid ${riskColors[result.riskLevel]}30` }}>
+            <div className="text-xs text-slate-400 uppercase tracking-wider mb-3">AI Risk Assessment</div>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="text-4xl font-bold" style={{ color: riskColors[result.riskLevel] }}>{result.riskScore}</div>
+              <div>
+                <div className="font-semibold text-lg" style={{ color: riskColors[result.riskLevel] }}>{result.riskLevel} Risk</div>
+                <div className="text-xs text-slate-500">Risk Score (0-100)</div>
+              </div>
             </div>
-            <div className="text-3xl font-bold mb-1">{result.riskLevel} Risk</div>
-            <div className="text-sm opacity-80 mb-3">Score: {result.riskScore} / 100</div>
-            <p className="text-sm opacity-90 leading-relaxed text-left">{result.riskRationale}</p>
+            <p className="text-slate-300 text-sm leading-relaxed">{result.riskRationale}</p>
           </div>
 
           <div className="flex gap-3">
-            <Link href="/" className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors text-center">
-              View Dashboard
+            <Link href="/" className="flex-1 py-2.5 rounded-xl text-center text-sm text-slate-300 hover:text-white transition-all" style={{ border: '1px solid rgba(59,130,246,0.2)' }}>
+              Back to Dashboard
             </Link>
             <button
               onClick={() => { setResult(null); setForm({ companyName: '', caseNumber: '', dateStarted: '', regulator: '', jurisdiction: '', area: '', summary: '', potentialExposureAmount: '', potentialExposureCriminal: false, exposureDescription: '', status: '', submittedBy: '' }); }}
-              className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium transition-colors text-center"
+              className="flex-1 py-2.5 rounded-xl text-center text-sm bg-blue-600 hover:bg-blue-500 text-white transition-all"
             >
               Submit Another
             </button>
@@ -106,187 +121,175 @@ export default function SubmitPage() {
   }
 
   return (
-    <div className="min-h-screen" style={{ background: 'linear-gradient(180deg, #04091a 0%, #070d1a 100%)' }}>
-      <header className="sticky top-0 z-40 border-b border-slate-800/60" style={{ background: 'rgba(7,13,26,0.92)', backdropFilter: 'blur(20px)' }}>
-        <div className="max-w-3xl mx-auto px-6 py-3 flex items-center gap-4">
-          <Link href="/" className="text-slate-500 hover:text-slate-300 transition-colors">
-            <ArrowLeft size={18} />
+    <div className="min-h-screen" style={{ background: '#070d1a' }}>
+      <nav className="glass border-b border-blue-900/30">
+        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center gap-4">
+          <Link href="/" className="flex items-center gap-2 text-slate-400 hover:text-white transition-all text-sm">
+            <ArrowLeft size={16} /> Back to Dashboard
           </Link>
-          <div className="flex items-center gap-3">
-            <div className="w-7 h-7 rounded-lg bg-blue-600/20 border border-blue-500/30 flex items-center justify-center">
-              <Shield size={14} className="text-blue-400" />
-            </div>
-            <div>
-              <div className="font-bold text-slate-100 text-sm tracking-tight">PROSUS</div>
-              <div className="text-xs text-slate-500">Submit Regulatory Matter</div>
-            </div>
+          <div className="h-4 w-px bg-slate-700" />
+          <div>
+            <div className="text-sm font-semibold text-white">Submit Regulatory Matter</div>
           </div>
         </div>
-      </header>
+      </nav>
 
-      <main className="max-w-3xl mx-auto px-6 py-8">
+      <main className="max-w-4xl mx-auto px-6 py-8">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-slate-100 mb-2">Report a Regulatory Matter</h1>
-          <p className="text-slate-400 text-sm">Submit new regulatory matters for your portfolio company. AI will automatically assess the risk level upon submission.</p>
+          <h1 className="text-2xl font-bold text-white mb-2">New Regulatory Matter</h1>
+          <p className="text-slate-400 text-sm">Submit a new matter for tracking. AI will automatically assess risk level and score.</p>
         </div>
 
+        {error && (
+          <div className="mb-6 px-4 py-3 rounded-xl text-sm text-red-300" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)' }}>
+            {error}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Company & Case */}
-          <div className="glass-card rounded-xl p-6 space-y-4">
-            <h2 className="text-sm font-semibold text-slate-300 border-b border-slate-800/60 pb-3">Case Information</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Basic Info */}
+          <div className="glass rounded-xl p-6">
+            <h3 className="text-sm font-semibold text-blue-400 uppercase tracking-wider mb-5">Basic Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Portfolio Company *</label>
-                <select required className="input-dark w-full rounded-lg px-3 py-2.5 text-sm" value={form.companyName} onChange={e => set('companyName', e.target.value)}>
-                  <option value="">Select company</option>
+                <label className={labelClass}>Company Name *</label>
+                <select name="companyName" value={form.companyName} onChange={handleChange} required className={`${inputClass} ${inputFocusStyle}`} style={inputStyle}>
+                  <option value="">Select company...</option>
                   {COMPANIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Case / Reference Number *</label>
-                <input required placeholder="e.g. REG-2024-015" className="input-dark w-full rounded-lg px-3 py-2.5 text-sm" value={form.caseNumber} onChange={e => set('caseNumber', e.target.value)} />
+                <label className={labelClass}>Case Number</label>
+                <input name="caseNumber" value={form.caseNumber} onChange={handleChange} placeholder="Auto-generated if blank" className={`${inputClass} ${inputFocusStyle}`} style={inputStyle} />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Date Matter Started *</label>
-                <input required type="date" className="input-dark w-full rounded-lg px-3 py-2.5 text-sm" value={form.dateStarted} onChange={e => set('dateStarted', e.target.value)} />
+                <label className={labelClass}>Submitted By *</label>
+                <input name="submittedBy" value={form.submittedBy} onChange={handleChange} required placeholder="Your name" className={`${inputClass} ${inputFocusStyle}`} style={inputStyle} />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Current Status *</label>
-                <select required className="input-dark w-full rounded-lg px-3 py-2.5 text-sm" value={form.status} onChange={e => set('status', e.target.value)}>
-                  <option value="">Select status</option>
+                <label className={labelClass}>Date Started *</label>
+                <input type="date" name="dateStarted" value={form.dateStarted} onChange={handleChange} required className={`${inputClass} ${inputFocusStyle}`} style={inputStyle} />
+              </div>
+            </div>
+          </div>
+
+          {/* Regulatory Details */}
+          <div className="glass rounded-xl p-6">
+            <h3 className="text-sm font-semibold text-blue-400 uppercase tracking-wider mb-5">Regulatory Details</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div>
+                <label className={labelClass}>Regulator *</label>
+                <input name="regulator" value={form.regulator} onChange={handleChange} required placeholder="e.g. CADE, FTC, ICO..." className={`${inputClass} ${inputFocusStyle}`} style={inputStyle} />
+              </div>
+              <div>
+                <label className={labelClass}>Jurisdiction *</label>
+                <input name="jurisdiction" value={form.jurisdiction} onChange={handleChange} required placeholder="e.g. Brazil, United States..." className={`${inputClass} ${inputFocusStyle}`} style={inputStyle} />
+              </div>
+              <div>
+                <label className={labelClass}>Regulatory Area *</label>
+                <select name="area" value={form.area} onChange={handleChange} required className={`${inputClass} ${inputFocusStyle}`} style={inputStyle}>
+                  <option value="">Select area...</option>
+                  {AREAS.map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>Status *</label>
+                <select name="status" value={form.status} onChange={handleChange} required className={`${inputClass} ${inputFocusStyle}`} style={inputStyle}>
+                  <option value="">Select status...</option>
                   {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
             </div>
-          </div>
-
-          {/* Regulator */}
-          <div className="glass-card rounded-xl p-6 space-y-4">
-            <h2 className="text-sm font-semibold text-slate-300 border-b border-slate-800/60 pb-3">Regulatory Authority</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="md:col-span-2">
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Regulator Name *</label>
-                <input required placeholder="e.g. Competition Commission of India (CCI)" className="input-dark w-full rounded-lg px-3 py-2.5 text-sm" value={form.regulator} onChange={e => set('regulator', e.target.value)} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Jurisdiction *</label>
-                <input required placeholder="e.g. India" className="input-dark w-full rounded-lg px-3 py-2.5 text-sm" value={form.jurisdiction} onChange={e => set('jurisdiction', e.target.value)} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Regulatory Area *</label>
-                <select required className="input-dark w-full rounded-lg px-3 py-2.5 text-sm" value={form.area} onChange={e => set('area', e.target.value)}>
-                  <option value="">Select area</option>
-                  {AREAS.map(a => <option key={a} value={a}>{a}</option>)}
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* Allegations */}
-          <div className="glass-card rounded-xl p-6 space-y-4">
-            <h2 className="text-sm font-semibold text-slate-300 border-b border-slate-800/60 pb-3">Matter Details</h2>
-            <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">Summary of Allegations *</label>
+            <div className="mt-5">
+              <label className={labelClass}>Case Summary *</label>
               <textarea
+                name="summary"
+                value={form.summary}
+                onChange={handleChange}
                 required
                 rows={4}
-                placeholder="Describe the regulatory matter, the allegations or concerns raised, and the key facts…"
-                className="input-dark w-full rounded-lg px-3 py-2.5 text-sm resize-none"
-                value={form.summary}
-                onChange={e => set('summary', e.target.value)}
+                placeholder="Provide a detailed description of the regulatory matter, allegations, and background..."
+                className={`${inputClass} ${inputFocusStyle} resize-none`}
+                style={inputStyle}
               />
-              <p className="text-xs text-slate-600 mt-1">{form.summary.length} characters (minimum 50 recommended)</p>
             </div>
           </div>
 
           {/* Exposure */}
-          <div className="glass-card rounded-xl p-6 space-y-4">
-            <h2 className="text-sm font-semibold text-slate-300 border-b border-slate-800/60 pb-3">Potential Exposure</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="glass rounded-xl p-6">
+            <h3 className="text-sm font-semibold text-blue-400 uppercase tracking-wider mb-5">Financial Exposure</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Financial Exposure (USD millions) *</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">$</span>
-                  <input
-                    required
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    placeholder="0"
-                    className="input-dark w-full rounded-lg pl-7 pr-10 py-2.5 text-sm"
-                    value={form.potentialExposureAmount}
-                    onChange={e => set('potentialExposureAmount', e.target.value)}
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs">M</span>
-                </div>
+                <label className={labelClass}>Potential Exposure Amount (USD) *</label>
+                <input
+                  type="number"
+                  name="potentialExposureAmount"
+                  value={form.potentialExposureAmount}
+                  onChange={handleChange}
+                  required
+                  min="0"
+                  placeholder="e.g. 25000000"
+                  className={`${inputClass} ${inputFocusStyle}`}
+                  style={inputStyle}
+                />
               </div>
-              <div className="flex items-end pb-0.5">
-                <label className="flex items-center gap-3 cursor-pointer">
+              <div className="flex items-center">
+                <label className="flex items-center gap-3 cursor-pointer mt-4">
                   <div className="relative">
                     <input
                       type="checkbox"
-                      className="sr-only"
+                      name="potentialExposureCriminal"
                       checked={form.potentialExposureCriminal}
-                      onChange={e => set('potentialExposureCriminal', e.target.checked)}
+                      onChange={handleChange}
+                      className="sr-only"
                     />
-                    <div className={`w-10 h-5 rounded-full transition-colors ${form.potentialExposureCriminal ? 'bg-red-600' : 'bg-slate-700'}`}>
-                      <div className={`w-4 h-4 bg-white rounded-full mt-0.5 transition-transform ${form.potentialExposureCriminal ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                    <div
+                      className="w-10 h-6 rounded-full transition-colors"
+                      style={{ background: form.potentialExposureCriminal ? '#ef4444' : 'rgba(59,130,246,0.2)' }}
+                    >
+                      <div
+                        className="w-4 h-4 bg-white rounded-full absolute top-1 transition-transform"
+                        style={{ transform: form.potentialExposureCriminal ? 'translateX(20px)' : 'translateX(4px)' }}
+                      />
                     </div>
                   </div>
-                  <div>
-                    <div className="text-sm text-slate-300">Criminal / Personal Liability</div>
-                    <div className="text-xs text-slate-500">Includes potential prosecution of officers</div>
-                  </div>
+                  <span className="text-sm text-slate-300">Criminal Exposure Risk</span>
                 </label>
               </div>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">Exposure Description *</label>
+            <div className="mt-5">
+              <label className={labelClass}>Exposure Description *</label>
               <textarea
+                name="exposureDescription"
+                value={form.exposureDescription}
+                onChange={handleChange}
                 required
                 rows={3}
-                placeholder="Describe how the exposure figure was calculated, what it covers (fines, remediation, legal costs), and any key assumptions…"
-                className="input-dark w-full rounded-lg px-3 py-2.5 text-sm resize-none"
-                value={form.exposureDescription}
-                onChange={e => set('exposureDescription', e.target.value)}
+                placeholder="Describe the nature and basis of the financial exposure estimate..."
+                className={`${inputClass} ${inputFocusStyle} resize-none`}
+                style={inputStyle}
               />
             </div>
           </div>
 
-          {/* Submitter */}
-          <div className="glass-card rounded-xl p-6 space-y-4">
-            <h2 className="text-sm font-semibold text-slate-300 border-b border-slate-800/60 pb-3">Submission Details</h2>
-            <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">Submitted By (Name & Title) *</label>
-              <input required placeholder="e.g. Jane Smith, Chief Compliance Officer" className="input-dark w-full rounded-lg px-3 py-2.5 text-sm" value={form.submittedBy} onChange={e => set('submittedBy', e.target.value)} />
+          <div className="flex items-center justify-between">
+            <div className="text-xs text-slate-500">
+              * AI will automatically generate risk level, score, and rationale
             </div>
-          </div>
-
-          {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-red-400 text-sm">
-              {error}
-            </div>
-          )}
-
-          <div className="flex items-center gap-4 pb-8">
             <button
               type="submit"
               disabled={submitting}
-              className="flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-colors"
+              className="flex items-center gap-2 px-8 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm"
             >
               {submitting ? (
                 <>
-                  <Loader2 size={16} className="animate-spin" />
-                  Submitting &amp; Assessing Risk…
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Analysing with AI...
                 </>
               ) : (
-                <>
-                  <Shield size={16} />
-                  Submit &amp; Generate AI Risk Score
-                </>
+                'Submit & Generate Risk Score'
               )}
             </button>
-            <Link href="/" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">Cancel</Link>
           </div>
         </form>
       </main>
