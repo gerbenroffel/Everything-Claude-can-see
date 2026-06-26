@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { Plus, FileText, RefreshCw } from 'lucide-react';
+import { Plus, FileText, RefreshCw, Printer } from 'lucide-react';
 import { RegulatoryMatter, RegulatoryArea, MatterStatus } from '@/lib/types';
 import MetricCards from '@/components/MetricCards';
 import MattersTable from '@/components/MattersTable';
@@ -75,6 +75,14 @@ export default function DashboardPage() {
               <FileText size={16} />
               Generate Executive Summary
             </button>
+            <Link
+              href="/print"
+              target="_blank"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-700/50 text-slate-300 hover:bg-slate-800/50 transition-all text-sm font-medium"
+            >
+              <Printer size={16} />
+              Print Report
+            </Link>
             <Link
               href="/submit"
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-all text-sm font-medium"
